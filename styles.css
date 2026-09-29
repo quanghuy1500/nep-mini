@@ -315,3 +315,13 @@ body {
 .qrfb-box { background: #fff; border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px; text-align: center; }
 .qrfb-box img { width: 100%; max-width: 280px; height: auto; -webkit-touch-callout: default; user-select: auto; }
 .settings-row .lead .d { word-break: break-all; }
+
+/* ============ Ô DÁN MÃ QR ============ */
+.paste-backdrop { z-index: 240; }
+.paste-box {
+  min-height: 120px; background: var(--card); border: 1.5px dashed var(--line); border-radius: var(--radius-md);
+  padding: 14px; margin-bottom: 14px; font-size: 15px; color: var(--muted); outline: none;
+  -webkit-user-select: text; user-select: text; word-break: break-all;
+}
+.paste-box:empty::before { content: 'Nhấn giữ ở đây để dán'; color: #b9b4a9; }
+.paste-box:focus { border-color: var(--accent); }
