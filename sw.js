@@ -1,5 +1,5 @@
 /* Service worker: cache tĩnh để app chạy offline sau lần mở đầu. */
-const CACHE = 'nep-mini-v3';
+const CACHE = 'nep-mini-v4';
 const ASSETS = [
   'index.html',
   'styles.css',
