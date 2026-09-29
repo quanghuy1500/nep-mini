@@ -327,9 +327,61 @@
     requestAnimationFrame(scanLoop);
   }
   $('#scan-close').addEventListener('click', stopScanner);
+  // ---- Dán mã QR: đọc ẢNH QR (hoặc chuỗi VietQR) từ clipboard, giống "Dán ảnh QR" của app ngân hàng ----
+  async function decodeClipboardBlob(blob) {
+    const raw = await window.QRImage.decodeFile(blob);
+    if (raw) onScanned(raw); else toast('Không tìm thấy mã QR trong ảnh đã copy');
+  }
+  function handlePastedText(text) {
+    const t = (text || '').trim();
+    if (!t) return false;
+    onScanned(t);
+    return true;
+  }
+
   $('#scan-paste').addEventListener('click', () => {
-    const raw = prompt('Dán chuỗi VietQR (bắt đầu bằng 000201...):');
-    if (raw) onScanned(raw.trim());
+    // clipboard.read() phải gọi ngay trong lần chạm; iOS sẽ hiện bong bóng "Dán" để bạn xác nhận
+    let readP = null;
+    try { if (navigator.clipboard && navigator.clipboard.read) readP = navigator.clipboard.read(); } catch { readP = null; }
+    if (!readP) { openPasteSheet(); return; }
+    readP.then(async (items) => {
+      for (const it of items) {
+        const imgType = it.types.find((t) => t.startsWith('image/'));
+        if (imgType) { await decodeClipboardBlob(await it.getType(imgType)); return; }
+      }
+      for (const it of items) {
+        if (it.types.includes('text/plain')) {
+          const text = await (await it.getType('text/plain')).text();
+          if (handlePastedText(text)) return;
+        }
+      }
+      toast('Clipboard chưa có ảnh hay mã QR');
+    }).catch(() => openPasteSheet()); // bị từ chối/không hỗ trợ -> ô dán thủ công
+  });
+
+  // Dự phòng: ô để nhấn giữ -> Dán (nhận cả ảnh lẫn chữ)
+  function openPasteSheet() {
+    const box = $('#paste-box');
+    box.innerHTML = '';
+    $('#paste-backdrop').classList.add('active');
+    setTimeout(() => box.focus(), 250);
+  }
+  function closePasteSheet() { $('#paste-backdrop').classList.remove('active'); }
+  $('#paste-backdrop').addEventListener('click', (e) => { if (e.target.id === 'paste-backdrop') closePasteSheet(); });
+  $('#paste-cancel').addEventListener('click', closePasteSheet);
+  $('#paste-box').addEventListener('paste', async (e) => {
+    e.preventDefault();
+    const dt = e.clipboardData;
+    if (!dt) return;
+    let file = Array.from(dt.files || []).find((f) => f.type.startsWith('image/'));
+    if (!file) {
+      const it = Array.from(dt.items || []).find((i) => i.kind === 'file' && i.type.startsWith('image/'));
+      file = it ? it.getAsFile() : null;
+    }
+    if (file) { closePasteSheet(); await decodeClipboardBlob(file); return; }
+    const text = dt.getData('text/plain');
+    if (text && text.trim()) { closePasteSheet(); handlePastedText(text); return; }
+    toast('Không có ảnh hay mã QR để dán');
   });
 
   function onScanned(raw) {
