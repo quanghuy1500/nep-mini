@@ -309,3 +309,9 @@ body {
 .picker-item .p-ic { width: 36px; height: 36px; border-radius: 50%; background: var(--chip-bg); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; flex-shrink: 0; }
 .picker-item .p-sub { font-size: 12px; color: var(--muted); }
 .picker-item .p-check { margin-left: auto; font-weight: 800; }
+
+/* ============ DỰ PHÒNG ẢNH QR ============ */
+.qrfb-backdrop { z-index: 260; }
+.qrfb-box { background: #fff; border-radius: var(--radius-md); padding: 12px; margin-bottom: 16px; text-align: center; }
+.qrfb-box img { width: 100%; max-width: 280px; height: auto; -webkit-touch-callout: default; user-select: auto; }
+.settings-row .lead .d { word-break: break-all; }
