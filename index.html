@@ -104,6 +104,14 @@
         <div class="lead"><span class="t">Danh mục</span></div>
         <div class="trail"><span id="set-cat-count">7 danh mục</span> ›</div>
       </div>
+      <div class="settings-row" id="set-scheme">
+        <div class="lead"><span class="t" id="set-scheme-bank">Link mở app ngân hàng</span><span class="d" id="set-scheme-val">—</span></div>
+        <div class="trail">Sửa ›</div>
+      </div>
+      <div class="settings-row" id="set-scheme-test">
+        <div class="lead"><span class="t">Thử mở app ngân hàng</span><span class="d">Kiểm tra link ở trên có mở đúng app không</span></div>
+        <div class="trail">›</div>
+      </div>
     </div>
 
     <div class="settings-group-label">Dữ liệu & Sao lưu</div>
@@ -276,6 +284,17 @@
         <button class="btn btn-danger-ghost" id="f-delete" hidden>Xoá</button>
         <button class="btn btn-primary" id="f-save">Lưu vào sổ</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ DỰ PHÒNG: nhấn giữ ảnh QR để sao chép ============ -->
+  <div class="modal-backdrop qrfb-backdrop" id="qrfb-backdrop">
+    <div class="sheet">
+      <div class="sheet-grip"></div>
+      <h2>Sao chép ảnh QR</h2>
+      <p class="recv">Nhấn giữ ảnh bên dưới → chọn <b>Sao chép</b>. Sau đó mở app ngân hàng → Quét QR → Dán ảnh QR.</p>
+      <div class="qrfb-box"><img id="qrfb-img" alt="Mã QR chuyển khoản đã có số tiền" /></div>
+      <button class="btn btn-primary" id="qrfb-open">Mở app ngân hàng</button>
     </div>
   </div>
 
