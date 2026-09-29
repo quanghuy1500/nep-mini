@@ -260,6 +260,7 @@
     $('#set-bank-count').textContent = banks.size + ' nguồn';
     $('#set-cat-count').textContent = CATEGORIES.length + ' danh mục';
     $('#set-tx-count').textContent = tx.length + ' giao dịch';
+    renderSchemeRow();
   }
   $('#set-export').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(loadTx(), null, 2)], { type: 'application/json' });
@@ -458,21 +459,32 @@
   });
 
   // ================= KIỂM TRA KHOẢN CHI =================
-  // Ngân hàng bạn dùng để TRẢ tiền. appId lấy từ danh sách deeplink công khai của VietQR.io
-  // (https://api.vietqr.io/v2/ios-app-deeplinks). Link chỉ chứa mã app, KHÔNG gửi số tài khoản/số tiền đi.
+  // Ngân hàng bạn dùng để TRẢ tiền.
+  // scheme: link mở thẳng app. mb/icb/bidv/acb lấy từ trang chuyển hướng của dl.vietqr.io (đã kiểm tra).
+  // MSB không có trong danh sách công khai -> scheme là PHỎNG ĐOÁN, sửa được trong Cài đặt.
+  // Ngân hàng không có scheme thì mở qua https://dl.vietqr.io/pay?app=<id> (chỉ chứa mã app).
   const PAY_BANKS = [
-    { id: 'mb', short: 'MB', name: 'MB Bank' },
+    { id: 'msb', short: 'MSB', name: 'MSB', scheme: 'msbmobile://', guessed: true },
+    { id: 'mb', short: 'MB', name: 'MB Bank', scheme: 'mbbank://' },
     { id: 'vcb', short: 'VCB', name: 'Vietcombank' },
     { id: 'tcb', short: 'TCB', name: 'Techcombank' },
-    { id: 'bidv', short: 'BIDV', name: 'BIDV' },
-    { id: 'icb', short: 'VTB', name: 'VietinBank' },
-    { id: 'acb', short: 'ACB', name: 'ACB' },
+    { id: 'bidv', short: 'BIDV', name: 'BIDV', scheme: 'bidv.smartbanking.partner://' },
+    { id: 'icb', short: 'VTB', name: 'VietinBank', scheme: 'vietinbankipay://' },
+    { id: 'acb', short: 'ACB', name: 'ACB', scheme: 'acbone://' },
     { id: 'vpb', short: 'VPB', name: 'VPBank' },
     { id: 'tpb', short: 'TPB', name: 'TPBank' },
     { id: 'vba', short: 'AGR', name: 'Agribank' },
     { id: 'timo', short: 'TIMO', name: 'Timo' },
     { id: 'cake', short: 'CAKE', name: 'Cake' },
   ];
+  const SCHEME_KEY = (id) => 'nep_mini_scheme_' + id;
+  // Link mở app: ưu tiên link bạn tự nhập trong Cài đặt, rồi tới scheme mặc định, cuối cùng là dl.vietqr.io
+  function openLinkFor(bank) {
+    const custom = (localStorage.getItem(SCHEME_KEY(bank.id)) || '').trim();
+    if (custom) return custom;
+    if (bank.scheme) return bank.scheme;
+    return 'https://dl.vietqr.io/pay?app=' + encodeURIComponent(bank.id);
+  }
   const PAY_BANK_KEY = 'nep_mini_pay_bank';
   const LAST_CAT_KEY = 'nep_mini_last_cat';
   const MAX_DIGITS = 12;
@@ -543,40 +555,111 @@
       (it) => { cf.category = it.key; localStorage.setItem(LAST_CAT_KEY, it.key); renderCfCategory(); });
   });
   $('#cf-bank').addEventListener('click', () => {
-    openPicker('Chuyển bằng ngân hàng', PAY_BANKS.map((b) => ({ id: b.id, icon: b.short.slice(0, 3), label: b.name, active: b.id === cf.payBank.id })),
+    openPicker('Chuyển bằng ngân hàng', PAY_BANKS.map((b) => ({ id: b.id, icon: b.short.slice(0, 3), label: b.name, sub: b.guessed ? 'Link mở app chưa kiểm chứng · sửa trong Cài đặt' : '', active: b.id === cf.payBank.id })),
       (it) => { cf.payBank = PAY_BANKS.find((b) => b.id === it.id); localStorage.setItem(PAY_BANK_KEY, it.id); renderCfBank(); });
   });
 
-  async function copyText(text) {
-    try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+  // ---- Tạo ảnh QR (PNG, có viền trắng) từ chuỗi VietQR. Vẽ đồng bộ để dùng được ngay trong lần chạm ----
+  function makeQrCanvas(text) {
+    const tmp = document.createElement('div');
+    new window.QRCode(tmp, { text, width: 480, height: 480, correctLevel: window.QRCode.CorrectLevel.M });
+    const src = tmp.querySelector('canvas');
+    const pad = 48;
+    const out = document.createElement('canvas');
+    out.width = src.width + pad * 2; out.height = src.height + pad * 2;
+    const g = out.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, out.width, out.height);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(src, pad, pad);
+    return out;
+  }
+  const canvasToBlob = (c) => new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob'))), 'image/png'));
+
+  // Copy ảnh vào clipboard. Phải gọi clipboard.write NGAY trong sự kiện chạm (Safari yêu cầu),
+  // nên truyền Promise<Blob> vào ClipboardItem thay vì await trước.
+  function copyImageToClipboard(canvas) {
+    try {
+      if (!navigator.clipboard || !window.ClipboardItem) return Promise.resolve(false);
+      const item = new ClipboardItem({ 'image/png': canvasToBlob(canvas) });
+      return navigator.clipboard.write([item]).then(() => true, () => false);
+    } catch { return Promise.resolve(false); }
   }
 
-  // Chuyển khoản: lưu vào sổ -> copy số TK -> mở app ngân hàng
-  $('#cf-pay').addEventListener('click', async () => {
+  function openBankApp(bank) { window.location.href = openLinkFor(bank); }
+
+  // Chuyển khoản: tạo QR có số tiền -> copy ảnh vào clipboard -> lưu sổ -> mở app ngân hàng
+  $('#cf-pay').addEventListener('click', () => {
     if (!cf) return;
     const amount = Number(cf.digits);
     if (!amount) return;
     const info = cf.info;
     const name = $('#cf-name').value.trim() || 'Người nhận';
     const note = $('#cf-note').value.trim();
+    const payBank = cf.payBank;
+
+    const qrStr = window.VietQR.buildVietQR({
+      bankBin: info.bankBin, accountNumber: info.accountNumber, amount,
+      purpose: (note || info.purpose || '').substring(0, 25),
+    });
+    const canvas = makeQrCanvas(qrStr);
+    const copyP = copyImageToClipboard(canvas); // gọi đồng bộ trong lần chạm
 
     const list = loadTx();
     list.unshift({
       id: Date.now(), ts: new Date().toISOString(), type: 'expense',
       amount, category: cf.category, name,
       bankName: info.bankName || '', accountNumber: info.accountNumber || '', bankBin: info.bankBin || null,
-      payBank: cf.payBank.name, note,
+      payBank: payBank.name, note,
     });
     saveTx(list);
-
-    const copied = info.accountNumber ? await copyText(info.accountNumber) : false;
-    const payBank = cf.payBank;
     closeConfirm();
     switchView('home');
-    toast(copied ? 'Đã lưu · đã copy số TK' : 'Đã lưu vào sổ');
-    // Mở app ngân hàng qua universal link của VietQR (chỉ chứa mã app)
-    setTimeout(() => { window.location.href = 'https://dl.vietqr.io/pay?app=' + encodeURIComponent(payBank.id); }, 600);
+
+    copyP.then((ok) => {
+      if (ok) {
+        toast('Đã copy ảnh QR · vào app chọn Dán ảnh QR');
+        setTimeout(() => openBankApp(payBank), 700);
+      } else {
+        showQrFallback(canvas, payBank); // iOS từ chối -> nhấn giữ ảnh để sao chép
+      }
+    });
   });
+
+  // ---- Dự phòng: hiện ảnh QR để nhấn giữ -> Sao chép ----
+  let fallbackBank = null;
+  function showQrFallback(canvas, bank) {
+    fallbackBank = bank;
+    $('#qrfb-img').src = canvas.toDataURL('image/png');
+    $('#qrfb-open').textContent = 'Mở ' + bank.name;
+    $('#qrfb-backdrop').classList.add('active');
+  }
+  $('#qrfb-open').addEventListener('click', () => {
+    $('#qrfb-backdrop').classList.remove('active');
+    if (fallbackBank) openBankApp(fallbackBank);
+  });
+  $('#qrfb-backdrop').addEventListener('click', (e) => {
+    if (e.target.id === 'qrfb-backdrop') $('#qrfb-backdrop').classList.remove('active');
+  });
+
+  // ---- Cài đặt: sửa link mở app của ngân hàng đang chọn ----
+  function renderSchemeRow() {
+    const b = getPayBank();
+    $('#set-scheme-bank').textContent = 'Link mở app ' + b.name;
+    $('#set-scheme-val').textContent = openLinkFor(b);
+  }
+  $('#set-scheme').addEventListener('click', () => {
+    const b = getPayBank();
+    const v = prompt(
+      `Link mở app ${b.name}.\nVD: msbmobile:// hoặc shortcuts://run-shortcut?name=Mở%20MSB\nĐể trống = dùng mặc định.`,
+      localStorage.getItem(SCHEME_KEY(b.id)) || openLinkFor(b));
+    if (v === null) return;
+    const t = v.trim();
+    // chỉ nhận dạng scheme:// hoặc https://, chặn javascript:/data: để tránh chạy mã lạ
+    if (t && (!/^[a-z][a-z0-9+.\-]*:\/\//i.test(t) || /^(javascript|data|vbscript|file):/i.test(t))) { toast('Link không hợp lệ'); return; }
+    if (t && t !== b.scheme) localStorage.setItem(SCHEME_KEY(b.id), t); else localStorage.removeItem(SCHEME_KEY(b.id));
+    renderSchemeRow(); toast('Đã lưu link');
+  });
+  $('#set-scheme-test').addEventListener('click', () => openBankApp(getPayBank()));
 
   // ================= KHỞI ĐỘNG =================
   renderHome();
